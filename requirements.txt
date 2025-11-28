@@ -1,0 +1,6 @@
+openai>=1.0.0
+python-dotenv>=1.0.0
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.3
+PyYAML>=6.0
+numpy>=1.23.0

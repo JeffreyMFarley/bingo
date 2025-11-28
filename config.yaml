@@ -1,0 +1,7 @@
+# Minimal configuration for the scaffold
+data_dir: data
+embed_model: sentence-transformers/all-MiniLM-L6-v2
+index_path: index.faiss
+docs_path: docs.json
+top_k: 3
+openai_model: gpt-4o-mini
