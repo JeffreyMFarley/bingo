@@ -8,7 +8,9 @@ import os
 import glob
 import json
 import argparse
+
 from dotenv import load_dotenv
+from langfuse import observe, get_client
 import yaml
 import numpy as np
 
@@ -81,23 +83,49 @@ def query_index_and_generate(query, index, docs, embed_model_name, top_k, openai
         raise RuntimeError("sentence-transformers is required. Install from requirements.txt")
     if OpenAI is None:
         raise RuntimeError("openai package is required. Install from requirements.txt")
+    try:
+        langfuse_cli = get_client()
+    except Exception:
+        print("Langfuse client initialization failed. Make sure LANGFUSE keys are set in .env.")
+        langfuse_cli = None
 
     client = OpenAI(api_key=openai_key)
-    emb_model = SentenceTransformer(embed_model_name)
-    q_emb = emb_model.encode([query], convert_to_numpy=True)
-    q_emb = np.asarray(q_emb, dtype="float32")
-    D, I = index.search(q_emb, top_k)
+
+    with langfuse_cli.start_as_current_observation(as_type="span", name="query", input={"query": query}) as span:
+        emb_model = SentenceTransformer(embed_model_name)
+        q_emb = emb_model.encode([query], convert_to_numpy=True)
+        q_emb = np.asarray(q_emb, dtype="float32")
+        D, I = index.search(q_emb, top_k)
+        span.update(output={"retrieved_indices": I[0], "distances": D[0]})
+        langfuse_cli.flush()
+    
     retrieved = [docs[i] for i in I[0] if i < len(docs)]
     context = "\n\n---\n\n".join(d.get("text", "") for d in retrieved)
     system = "You are an assistant that answers using the provided context. If the answer is not in the context, say you don't know and be concise."
     prompt = f"CONTEXT:\n{context}\n\nQUESTION: {query}\n\nAnswer concisely:"
-    resp = client.chat.completions.create(model=openai_model,
-    messages=[
-        {"role": "system", "content": system},
-        {"role": "user", "content": prompt},
-    ],
-    max_tokens=512,
-    temperature=0.0)
+
+    with langfuse_cli.start_as_current_observation(
+        as_type="generation",
+        name="call-llm",
+        model=openai_model,
+        input={"prompt": prompt, "system": system},
+        model_parameters={"temperature": 0.0}
+    ) as span:
+        try:
+            resp = client.chat.completions.create(model=openai_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=512,
+            temperature=0.0)
+            span.update(output={"response": resp.choices[0].message.content})
+        except Exception as e:
+            span.update(error={"message": str(e)})
+            raise
+        finally:
+            langfuse_cli.flush()
+
     return resp.choices[0].message.content.strip(), retrieved
 
 
@@ -133,6 +161,7 @@ def main():
         if not openai_key:
             print("OPENAI_API_KEY not set. Copy .env.example to .env and set your key.")
             return
+        
         index, docs = load_index(index_path=index_path, docs_path=docs_path)
         answer, retrieved = query_index_and_generate(args.query, index, docs, embed_model, top_k, openai_model, openai_key)
         print("--- Retrieved docs ---")
@@ -140,6 +169,7 @@ def main():
             print(r.get("path"))
         print("\n--- Answer ---\n")
         print(answer)
+
         return
 
     parser.print_help()
