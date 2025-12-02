@@ -4,3 +4,4 @@ __pycache__/
 index.faiss
 docs.json
 *.py[cod]
+data/
