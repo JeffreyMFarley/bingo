@@ -35,8 +35,13 @@ def load_config(path="config.yaml"):
 def read_text_files(data_dir):
     docs = []
     patterns = ["**/*.txt", "*.txt"]
+
+    found = set()
     for pat in patterns:
         for p in glob.glob(os.path.join(data_dir, pat), recursive=True):
+            if p in found:
+                continue
+            found.add(p)
             try:
                 with open(p, "r", encoding="utf-8") as fh:
                     docs.append({"path": p, "text": fh.read()})
