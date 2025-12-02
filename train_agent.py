@@ -23,10 +23,9 @@ except Exception:
     faiss = None
 
 try:
-    import openai
+    from openai import OpenAI
 except Exception:
-    openai = None
-
+    OpenAI = None
 
 def load_config(path="config.yaml"):
     with open(path, "r", encoding="utf-8") as f:
@@ -75,8 +74,10 @@ def load_index(index_path="index.faiss", docs_path="docs.json"):
 def query_index_and_generate(query, index, docs, embed_model_name, top_k, openai_model, openai_key):
     if SentenceTransformer is None:
         raise RuntimeError("sentence-transformers is required. Install from requirements.txt")
-    if openai is None:
+    if OpenAI is None:
         raise RuntimeError("openai package is required. Install from requirements.txt")
+
+    client = OpenAI(api_key=openai_key)
     emb_model = SentenceTransformer(embed_model_name)
     q_emb = emb_model.encode([query], convert_to_numpy=True)
     q_emb = np.asarray(q_emb, dtype="float32")
@@ -85,17 +86,14 @@ def query_index_and_generate(query, index, docs, embed_model_name, top_k, openai
     context = "\n\n---\n\n".join(d.get("text", "") for d in retrieved)
     system = "You are an assistant that answers using the provided context. If the answer is not in the context, say you don't know and be concise."
     prompt = f"CONTEXT:\n{context}\n\nQUESTION: {query}\n\nAnswer concisely:"
-    openai.api_key = openai_key
-    resp = openai.ChatCompletion.create(
-        model=openai_model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=512,
-        temperature=0.0,
-    )
-    return resp["choices"][0]["message"]["content"].strip(), retrieved
+    resp = client.chat.completions.create(model=openai_model,
+    messages=[
+        {"role": "system", "content": system},
+        {"role": "user", "content": prompt},
+    ],
+    max_tokens=512,
+    temperature=0.0)
+    return resp.choices[0].message.content.strip(), retrieved
 
 
 def main():
