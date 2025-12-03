@@ -48,12 +48,8 @@ async def main():
             return
         
         answer, retrieved = query_index_and_generate(args.query, retriever, openai_model, openai_key)
-        print("--- Retrieved docs ---")
-        for r in retrieved:
-            print(r)
         print("\n--- Answer ---\n")
         print(answer)
-
         return
 
     parser.print_help()

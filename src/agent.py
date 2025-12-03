@@ -21,6 +21,10 @@ def query_index_and_generate(query, retriever: RetrieverLlama, openai_model, ope
     system = "You are an assistant that answers using the provided context. If the answer is not in the context, say you don't know and be concise."
     prompt = f"CONTEXT:\n{context}\n\nQUESTION: {query}\n\nAnswer concisely:"
 
+    print("--- Retrieved docs ---", retriever.retrieval_mode)
+    for r in retrieved:
+        print(r)
+
     with langfuse_cli.start_as_current_observation(
         as_type="generation",
         name="call-llm",
