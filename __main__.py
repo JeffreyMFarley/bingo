@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import yaml
 
 from src.agent import query_index_and_generate
-from src.retriever_faiss import read_text_files, build_index, load_index
+from src.retriever_faiss import RetrieverFaiss
 
 
 def load_config(path="config.yaml"):
@@ -32,12 +32,15 @@ def main():
     top_k = cfg.get("top_k", 3)
     openai_key = os.getenv("OPENAI_API_KEY")
 
+    retriever = RetrieverFaiss(
+        model_name=embed_model,
+        index_path=index_path,
+        docs_path=docs_path,
+        top_k=top_k
+    )
+
     if args.build_index:
-        docs = read_text_files(data_dir)
-        if not docs:
-            print(f"No .txt files found in {data_dir}. Add plaintext docs and try again.")
-            return
-        build_index(docs, embed_model, index_path=index_path, docs_path=docs_path)
+        retriever.build_index(data_dir)
         return
 
     if args.query:
@@ -48,8 +51,7 @@ def main():
             print("OPENAI_API_KEY not set. Copy .env.example to .env and set your key.")
             return
         
-        index, docs = load_index(index_path=index_path, docs_path=docs_path)
-        answer, retrieved = query_index_and_generate(args.query, index, docs, embed_model, top_k, openai_model, openai_key)
+        answer, retrieved = query_index_and_generate(args.query, retriever, openai_model, openai_key)
         print("--- Retrieved docs ---")
         for r in retrieved:
             print(r.get("path"))
