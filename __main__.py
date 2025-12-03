@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import yaml
 
 from src.agent import query_index_and_generate
-from src.retriever_llama import RetrieverLlama
+from src.retriever_llama import RetrieverLlama, RETRIEVAL_MODES
 
 
 def load_config(path="config.yaml"):
@@ -21,6 +21,7 @@ async def main():
     parser.add_argument("--build-index", action="store_true", help="Build FAISS index from data dir")
     parser.add_argument("--query", type=str, help="Query the index with a question")
     parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--retrieval-mode", choices=RETRIEVAL_MODES, default="chunks", help="Retrieval mode: 'chunks' or 'files'")
     args = parser.parse_args()
 
     load_dotenv()
@@ -33,7 +34,7 @@ async def main():
     top_k = cfg.get("top_k", 3)
     openai_key = os.getenv("OPENAI_API_KEY")
 
-    retriever = RetrieverLlama(top_k=top_k, name="bingo")
+    retriever = RetrieverLlama(top_k=top_k, name="bingo", retrieval_mode=args.retrieval_mode)
 
     if args.build_index:
         await retriever.build_index(data_dir)

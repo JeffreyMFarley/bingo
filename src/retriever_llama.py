@@ -4,12 +4,14 @@ import glob
 from langfuse import observe
 from llama_cloud_services import LlamaCloudIndex
 
+RETRIEVAL_MODES = ["chunks", "files"]
 
 class RetrieverLlama:
     def __init__(
         self,
         top_k=5,
         name: str = "bingo",
+        retrieval_mode="chunks",
         patterns=None
     ):
         """
@@ -26,6 +28,7 @@ class RetrieverLlama:
         self.name = name
         self.org_id = os.getenv("LLAMA_ORG")
         self.patterns = patterns or ["**/*.txt", "*.txt"]
+        self.retrieval_mode = retrieval_mode
         self.top_k = top_k
     
     async def _read_text_files(self, data_dir, index):
@@ -67,6 +70,25 @@ class RetrieverLlama:
         )
         await self._read_text_files(data_dir, index)  
     
+    def _query_chunks(self, index, query):
+        chunk_retriever = index.as_retriever(
+            dense_similarity_top_k=self.top_k,
+            sparse_similarity_top_k=self.top_k,
+            enable_reranking=True,
+            rerank_top_n=self.top_k,
+            chunk_size=500,
+            chunk_overlap=50,
+        )
+        nodes = chunk_retriever.retrieve(query)
+        return nodes
+    
+    def _query_files(self, index, query):
+        file_retriever = index.as_retriever(
+            retrieval_mode="files_via_content", files_top_k=2
+        )
+        nodes = file_retriever.retrieve(query)
+        return nodes
+
     @observe
     def query(self, query):
         index = LlamaCloudIndex(
@@ -76,15 +98,7 @@ class RetrieverLlama:
             api_key=self.api_key,
         )
 
-        chunk_retriever = index.as_retriever(
-            dense_similarity_top_k=self.top_k,
-            sparse_similarity_top_k=self.top_k,
-            enable_reranking=True,
-            rerank_top_n=3,
-            chunk_size=500,
-            chunk_overlap=50,
-        )
-        nodes = chunk_retriever.retrieve(query)
+        nodes = self._query_chunks(index, query) if self.retrieval_mode == "chunks" else self._query_files(index, query)
         context = "\n\n---\n\n".join(n.text for n in nodes)
         retrieved = [
             f"{n.metadata.get('file_name')} {len(n.text)} chars"
