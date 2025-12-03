@@ -4,9 +4,9 @@ try:
 except Exception:
     OpenAI = None
 
-from src.retriever_faiss import RetrieverFaiss
+from src.retriever_llama import RetrieverLlama
 
-def query_index_and_generate(query, retriever: RetrieverFaiss, openai_model, openai_key):
+def query_index_and_generate(query, retriever: RetrieverLlama, openai_model, openai_key):
     if OpenAI is None:
         raise RuntimeError("openai package is required. Install from requirements.txt")
     client = OpenAI(api_key=openai_key)

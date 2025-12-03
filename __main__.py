@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import asyncio
 import os
 import argparse
 
@@ -7,7 +8,7 @@ from dotenv import load_dotenv
 import yaml
 
 from src.agent import query_index_and_generate
-from src.retriever_faiss import RetrieverFaiss
+from src.retriever_llama import RetrieverLlama
 
 
 def load_config(path="config.yaml"):
@@ -15,7 +16,7 @@ def load_config(path="config.yaml"):
         return yaml.safe_load(f)
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--build-index", action="store_true", help="Build FAISS index from data dir")
     parser.add_argument("--query", type=str, help="Query the index with a question")
@@ -32,19 +33,14 @@ def main():
     top_k = cfg.get("top_k", 3)
     openai_key = os.getenv("OPENAI_API_KEY")
 
-    retriever = RetrieverFaiss(
-        model_name=embed_model,
-        index_path=index_path,
-        docs_path=docs_path,
-        top_k=top_k
-    )
+    retriever = RetrieverLlama(top_k=top_k, name="bingo")
 
     if args.build_index:
-        retriever.build_index(data_dir)
+        await retriever.build_index(data_dir)
         return
 
     if args.query:
-        if not os.path.exists(index_path) or not os.path.exists(docs_path):
+        if not retriever.index_exists():
             print("Index or docs not found. Run with --build-index first.")
             return
         if not openai_key:
@@ -54,7 +50,7 @@ def main():
         answer, retrieved = query_index_and_generate(args.query, retriever, openai_model, openai_key)
         print("--- Retrieved docs ---")
         for r in retrieved:
-            print(r.get("path"))
+            print(r)
         print("\n--- Answer ---\n")
         print(answer)
 
@@ -64,4 +60,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main()) 

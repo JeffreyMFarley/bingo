@@ -70,6 +70,10 @@ class RetrieverFaiss:
                     continue
         return docs
     
+    def index_exists(self):
+        """Check if index and docs files exist."""
+        return os.path.exists(self.index_path) and os.path.exists(self.docs_path)
+
     def build_index(self, data_dir):
         """Build FAISS index from documents."""
         if faiss is None:

@@ -3,5 +3,5 @@ data_dir: data
 embed_model: sentence-transformers/all-MiniLM-L6-v2
 index_path: index.faiss
 docs_path: docs.json
-top_k: 1
-openai_model: gpt-4o-mini
+top_k: 3
+openai_model: gpt-4.1-mini-2025-04-14
