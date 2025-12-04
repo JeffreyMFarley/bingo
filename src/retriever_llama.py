@@ -1,7 +1,7 @@
 import os
 import glob
 
-from langfuse import observe
+from langfuse import observe, get_client
 from llama_cloud_services import LlamaCloudIndex
 
 RETRIEVAL_MODES = ["chunks", "files"]
@@ -104,4 +104,10 @@ class RetrieverLlama:
             f"{n.metadata.get('file_name')} {len(n.text)} chars"
              for n in nodes
         ]
+        score = max([n.score for n in nodes] or [0.0])
+
+        client = get_client()
+        client.score_current_span(name="query_relevance",
+                                  value=score,
+                                  data_type="NUMERIC")
         return retrieved, context
