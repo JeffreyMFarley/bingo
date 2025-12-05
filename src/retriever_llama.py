@@ -89,7 +89,7 @@ class RetrieverLlama:
         nodes = file_retriever.retrieve(query)
         return nodes
 
-    @observe
+    @observe(name="llama_query")
     def query(self, query):
         index = LlamaCloudIndex(
             name=self.name,
@@ -104,7 +104,7 @@ class RetrieverLlama:
             f"{n.metadata.get('file_name')} {len(n.text)} chars"
              for n in nodes
         ]
-        score = max([n.score for n in nodes] or [0.0])
+        score = 0.0 if not nodes else max(n.score if n.score is not None else 0.0 for n in nodes)
 
         client = get_client()
         client.score_current_span(name="query_relevance",
