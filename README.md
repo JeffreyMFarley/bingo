@@ -29,3 +29,18 @@ python train_agent.py --query "Your question here"
 ```
 
 This is a scaffold — update the model names and integration points to match your OpenAI plan or project conventions.
+
+## Excel analysis agent
+
+The `excel_agent.py` entrypoint inspects `.xlsx` workbooks and emits a JSON summary of sheets, detected tables, and inferred relational intent (primary keys, foreign keys, enums, etc.).
+
+```bash
+python excel_agent.py --workbook data/example.xlsx --pretty
+```
+
+Key flags:
+
+- `--db-agent-version`: stamp a semantic version string into the output.
+- `--sample-values`: limit per-column sample values in the JSON.
+- `--enum-threshold`: tweak how aggressively enum warnings are emitted.
+- `--output`: optional path to save the JSON blob (otherwise prints to stdout).
