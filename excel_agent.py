@@ -16,26 +16,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--enum-threshold", type=int, default=8, help="Distinct value threshold to consider a column an enum.")
     parser.add_argument("--output", help="Optional path to save the JSON output.")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON with indentation.")
+    parser.add_argument("--include-sample-values", action="store_true", help="Show sample values in analysis")
+    parser.add_argument("--include-enum-values", action="store_true", help="Show enum values in analysis")
+
     return parser.parse_args()
 
-
-def main() -> None:
-    args = parse_args()
+def analyze_workbook_to_json(args) -> str:
     analyzer = ExcelAnalyzer(
         db_agent_version=args.db_agent_version,
         sample_values=args.sample_values,
         enum_threshold=args.enum_threshold,
+        include_sample_values=args.include_sample_values,
+        include_enum_values=args.include_enum_values,
     )
-
-    try:
-        analysis = analyzer.analyze_workbook(args.workbook)
-    except FileNotFoundError as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
-
+    analysis = analyzer.analyze_workbook(args.workbook)
     indent = 2 if args.pretty else None
-    json_output = json.dumps(analysis, indent=indent)
+    return json.dumps(analysis, indent=indent)
 
+
+def main() -> None:
+    args = parse_args()
+    json_output = analyze_workbook_to_json(args)
     if args.output:
         output_path = Path(args.output)
         output_path.write_text(json_output + ("\n" if not json_output.endswith("\n") else ""), encoding="utf-8")
