@@ -2,17 +2,37 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from openpyxl import load_workbook
 from openpyxl.utils.cell import get_column_letter, range_boundaries
-from openpyxl.worksheet.worksheet import Worksheet
+
+try:
+    import xlrd  # type: ignore
+    from xlrd.xldate import xldate_as_datetime  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    xlrd = None  # type: ignore
+    xldate_as_datetime = None  # type: ignore
 import random
 
 
 Value = Any
+
+
+@dataclass
+class SheetTable:
+    ref: str
+    display_name: Optional[str] = None
+
+
+@dataclass
+class SheetData:
+    title: str
+    rows: List[List[Any]]
+    tables: List[SheetTable]
 
 
 class ExcelAnalyzer:
@@ -28,12 +48,11 @@ class ExcelAnalyzer:
         if not path.exists():
             raise FileNotFoundError(f"Workbook not found: {path}")
 
-        wb = load_workbook(filename=path, data_only=True, read_only=False)
-
+        sheet_data_list = self._load_sheet_data(path)
         sheet_reports: List[Dict[str, Any]] = []
         table_profiles: List[Dict[str, Any]] = []
 
-        for idx, sheet in enumerate(wb.worksheets):
+        for idx, sheet in enumerate(sheet_data_list):
             tables = self._extract_tables(sheet, sheet_index=idx)
             sheet_reports.append(
                 {
@@ -44,8 +63,6 @@ class ExcelAnalyzer:
                 }
             )
             table_profiles.extend(tables)
-
-        wb.close()
 
         foreign_key_lookup = self._detect_foreign_keys(table_profiles)
         warnings: List[Dict[str, Any]] = []
@@ -87,22 +104,76 @@ class ExcelAnalyzer:
         }
         return analysis
 
+    def _load_sheet_data(self, path: Path) -> List[SheetData]:
+        suffix = path.suffix.lower()
+        if suffix == ".xls":
+            return self._load_xls(path)
+        return self._load_xlsx(path)
+
+    def _load_xlsx(self, path: Path) -> List[SheetData]:
+        wb = load_workbook(filename=path, data_only=True, read_only=False)
+        sheets: List[SheetData] = []
+        try:
+            for ws in wb.worksheets:
+                rows = [list(row) for row in ws.iter_rows(values_only=True)]
+                tables = [
+                    SheetTable(ref=tbl.ref, display_name=getattr(tbl, "displayName", None))
+                    for tbl in ws.tables.values()
+                ]
+                sheets.append(SheetData(title=ws.title, rows=rows, tables=tables))
+        finally:
+            wb.close()
+        return sheets
+
+    def _load_xls(self, path: Path) -> List[SheetData]:
+        if xlrd is None or xldate_as_datetime is None:
+            raise RuntimeError("xlrd is required to read .xls workbooks. Install from requirements.txt.")
+        book = xlrd.open_workbook(filename=str(path))
+        sheets: List[SheetData] = []
+        for sheet in book.sheets():
+            rows: List[List[Any]] = []
+            for row_idx in range(sheet.nrows):
+                row_values: List[Any] = []
+                for col_idx in range(sheet.ncols):
+                    cell = sheet.cell(row_idx, col_idx)
+                    value = cell.value
+                    if cell.ctype == xlrd.XL_CELL_DATE:
+                        try:
+                            value = xldate_as_datetime(value, book.datemode)
+                        except Exception:
+                            pass
+                    row_values.append(value)
+                rows.append(row_values)
+            sheets.append(SheetData(title=sheet.name, rows=rows, tables=[]))
+        return sheets
+
+    def _slice_range(self, sheet: SheetData, min_row: int, max_row: int, min_col: int, max_col: int) -> List[List[Any]]:
+        block: List[List[Any]] = []
+        for row_idx in range(min_row, max_row + 1):
+            source_row = sheet.rows[row_idx - 1] if 0 <= row_idx - 1 < len(sheet.rows) else []
+            block_row: List[Any] = []
+            for col_idx in range(min_col, max_col + 1):
+                value = source_row[col_idx - 1] if 0 <= col_idx - 1 < len(source_row) else None
+                block_row.append(value)
+            block.append(block_row)
+        return block
+
     # ----- table extraction -------------------------------------------------
 
-    def _extract_tables(self, sheet: Worksheet, sheet_index: int) -> List[Dict[str, Any]]:
+    def _extract_tables(self, sheet: SheetData, sheet_index: int) -> List[Dict[str, Any]]:
         tables: List[Dict[str, Any]] = []
         table_counter = 1
         existing_ranges: List[str] = []
 
         if sheet.tables:
-            for defined_table in sheet.tables.values():
+            for defined_table in sheet.tables:
                 table = self._build_table_from_range(
                     sheet=sheet,
                     sheet_index=sheet_index,
                     ref=defined_table.ref,
-                    table_name=defined_table.displayName or f"{sheet.title}_Table{table_counter}",
+                    table_name=defined_table.display_name or f"{sheet.title}_Table{table_counter}",
                     confidence=0.98,
-                    notes=[f"Excel table '{defined_table.displayName}' detected"],
+                    notes=[f"Excel table '{defined_table.display_name}' detected"] if defined_table.display_name else ["Excel table detected"],
                 )
                 if table:
                     tables.append(table)
@@ -123,13 +194,14 @@ class ExcelAnalyzer:
             )
             if table:
                 tables.append(table)
+                existing_ranges.append(table["range"])
                 table_counter += 1
 
         return tables
 
     def _build_table_from_range(
         self,
-        sheet: Worksheet,
+        sheet: SheetData,
         sheet_index: int,
         ref: str,
         table_name: str,
@@ -141,12 +213,7 @@ class ExcelAnalyzer:
         if total_rows < 2:
             return None
 
-        values = [
-            list(row)
-            for row in sheet.iter_rows(
-                min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col, values_only=True
-            )
-        ]
+        values = self._slice_range(sheet, min_row, max_row, min_col, max_col)
         header = values[0]
         data_rows = values[1:]
 
@@ -190,8 +257,8 @@ class ExcelAnalyzer:
 
         return table
 
-    def _infer_table_ranges(self, sheet: Worksheet) -> List[str]:
-        rows = list(sheet.iter_rows(values_only=True))
+    def _infer_table_ranges(self, sheet: SheetData) -> List[str]:
+        rows = sheet.rows
         if not rows:
             return []
 

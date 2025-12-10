@@ -44,3 +44,4 @@ Key flags:
 - `--sample-values`: limit per-column sample values in the JSON.
 - `--enum-threshold`: tweak how aggressively enum warnings are emitted.
 - `--output`: optional path to save the JSON blob (otherwise prints to stdout).
+- Both `.xlsx` (via `openpyxl`) and legacy `.xls` (via `xlrd`) workbooks are supported.
